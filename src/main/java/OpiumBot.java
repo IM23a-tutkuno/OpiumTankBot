@@ -8,7 +8,9 @@ import dev.zwazel.internal.game.map.MapDefinition;
 import dev.zwazel.internal.game.map.MarkerDefinition;
 import dev.zwazel.internal.game.map.TileDefinition;
 import dev.zwazel.internal.game.map.marker.FlagBase;
+import dev.zwazel.internal.debug.MapVisualiser;
 import dev.zwazel.internal.game.state.ClientState;
+import dev.zwazel.internal.game.utils.Node;
 import dev.zwazel.internal.game.tank.Tank;
 import dev.zwazel.internal.game.tank.TankConfig;
 import dev.zwazel.internal.game.tank.implemented.LightTank;
@@ -20,6 +22,8 @@ import dev.zwazel.internal.message.data.SimpleTextMessage;
 import dev.zwazel.internal.message.data.tank.GotHit;
 import dev.zwazel.internal.message.data.tank.Hit;
 
+
+import java.util.LinkedList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -34,10 +38,13 @@ public class OpiumBot implements BotInterface {
     public int tick_count = 0;
     public List<int[]> path;
     public int array_pos = 0;
+    public int load_counter = 0;
 
 
     private List<ConnectedClientConfig> teamMembers;
     private List<ConnectedClientConfig> enemyTeamMembers;
+
+    private MapVisualiser visualiser;
 
     public OpiumBot() {
         this.minAttackDistance = Float.parseFloat(propertyHandler.getProperty("bot.attack.minDistance"));
@@ -48,6 +55,8 @@ public class OpiumBot implements BotInterface {
         // GameWorld.startGame(this, LightTank.class);
         // This starts the game with a LightTank, and immediately starts the game when connected
         GameWorld.connectToServer(this, LightTank.class); // This connects to the server with a LightTank, but does not immediately start the game
+
+
     }
 
     @Override
@@ -64,6 +73,7 @@ public class OpiumBot implements BotInterface {
         teamMembers = config.getTeamMembers(myTeamConfig.teamName(), config.clientId());
         // Get all enemy team members
         enemyTeamMembers = config.getTeamMembers(enemyTeamConfig.teamName());
+
     }
 
 
@@ -93,8 +103,6 @@ public class OpiumBot implements BotInterface {
 
         MapDefinition mapDefinition = config.mapDefinition();
 
-        System.out.println(Arrays.deepToString(mapDefinition.tiles()));
-
 
         MarkerDefinition[] markers = config.mapDefinition().markers();
         String myTeam = myconfig.clientTeam();
@@ -105,7 +113,6 @@ public class OpiumBot implements BotInterface {
         int x_tank_tile = (int) my_coordinates.getX();
         int y_tank_tile = (int) my_coordinates.getZ();
 
-
         System.out.println("y_coord = " + y_tank_tile);
         System.out.println("x_coord = " + x_tank_tile);
 
@@ -115,8 +122,9 @@ public class OpiumBot implements BotInterface {
         double tile_height = my_coordinates.getY();
 
         for (MarkerDefinition marker : markers) {
-            if (marker.kind() instanceof FlagBase && Objects.equals(marker.group(), myTeam)) {
+            if (marker.kind() instanceof FlagBase && !Objects.equals(marker.group(), myTeam)) {
                 System.out.println("FlagBase found");
+                System.out.println(marker.tile());
                 long x = marker.tile().x();
                 long y = marker.tile().y();
                 int tile_x = (int) Math.floor(x);
@@ -124,7 +132,8 @@ public class OpiumBot implements BotInterface {
 
 
                 Vec3 Flag_coordinate = Vec3.builder().x(tile_x).y(tile_y).z(tile_height).build();
-                enemy_flag_coordinates = new int[]{tile_x, tile_y};
+                enemy_flag_coordinates = new int[]{tile_y, tile_x};
+                System.out.println("enemy_flag_coordinates = " + Arrays.toString(enemy_flag_coordinates));
             }
         }
 
@@ -132,10 +141,17 @@ public class OpiumBot implements BotInterface {
         int move_to_x = 0;
         int move_to_y = 0;
 
-        if (array_pos == 0) {
+        if (this.tick_count == 10) {
+            this.tick_count = 0;
+        } else if (this.tick_count == 0) {
             this.path = AStarVisualizer.findPath(map, my_path_coordinates, enemy_flag_coordinates);
-            System.out.println(Arrays.deepToString(path.toArray()));
+            System.out.println("loaded map!");
+            System.out.println(Arrays.deepToString(this.path.toArray()));
+            load_counter++;
+            this.tick_count++;
         }
+
+
 
         System.out.println("my_path_coordinates = " + Arrays.toString(my_path_coordinates));
         System.out.println("this.path.get(0)[0] = " + this.path.get(array_pos)[0]);
@@ -145,11 +161,12 @@ public class OpiumBot implements BotInterface {
             System.out.println("Condition true");
             array_pos++;
         }
+        int pathY = this.path.get(array_pos)[0];
+        int pathX = this.path.get(array_pos)[1];
 
 
-
-        move_to_x = this.path.get(array_pos)[1];
-        move_to_y = this.path.get(array_pos)[0];
+        move_to_x = pathX;
+        move_to_y = pathY;
         System.out.println("move_to_x = " + move_to_x);
         System.out.println("move_to_y = " + move_to_y);
         Vec3 move_coordinates = config.mapDefinition().getWorldTileCenter(move_to_x, move_to_y);
@@ -157,11 +174,7 @@ public class OpiumBot implements BotInterface {
         tank.moveTowards(world, move_coordinates, false);
 
 
-        if (this.tick_count < 4) {
-            this.tick_count++;
-        } else {
-            this.tick_count = 0;
-        }
+
 
 
         // Vec3 move_coordinates = Vec3.builder().x(move_to_x).y(move_to_y).build();
